@@ -1,0 +1,608 @@
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+import { useGeminiRealtime } from './hooks/useGeminiRealtime'
+import { useArchitectureAnalysis } from './hooks/useArchitectureAnalysis'
+import { DatabaseShapeUtil } from './components/ui/DatabaseShape'
+import { ServerShapeUtil } from './components/ui/ServerShape'
+import { UserShapeUtil } from './components/ui/UserShape'
+import { LLMShapeUtil } from './components/ui/LLMShape'
+import { FrontendShapeUtil } from './components/ui/FrontendShape'
+import { GPTRealtimeShapeUtil } from './components/ui/GPTRealtimeShape'
+import { SuggestionsPopup } from './components/SuggestionsPopup'
+import { useRef, useCallback, useState } from 'react'
+import { ApiKeyModal } from './components/ApiKeyModal'
+import { InfoPopup } from './components/InfoPopup'
+import { GoogleGenAI } from '@google/genai'
+
+export default function Whiteboard() {
+  const { isRealtimeConnected, isRealtimeConnecting, isMuted, error: realtimeError, connectRealtime, disconnectRealtime, toggleMute, setEditor: setEditorRealtime } = useGeminiRealtime()
+  const editorRef = useRef<any>(null)
+
+  const [apiKey, setApiKey] = useState<string | null>(null)
+  const [showApiKeyModal, setShowApiKeyModal] = useState(true)
+  const [textPrompt, setTextPrompt] = useState('')
+  const [isTextGenerating, setIsTextGenerating] = useState(false)
+  const [textError, setTextError] = useState<string | null>(null)
+  
+  const architectureAnalysis = useArchitectureAnalysis(apiKey ?? '')
+
+  // Add state to track if initial analysis has been done
+  const [hasRunInitialAnalysis, setHasRunInitialAnalysis] = useState(false)
+
+  // Note: Analysis is now triggered by shape creation events in onMount
+
+  const createWhiteboardShape = useCallback((shapeType: string, x: number, y: number, customProps: Record<string, any> = {}) => {
+    const editor = editorRef.current
+    if (!editor) return null
+
+    const shapeTypeMap = {
+      database: 'database',
+      person: 'user',
+      server: 'server',
+      gpt_5: 'llm',
+      frontend: 'frontend',
+      gpt_realtime: 'gpt_realtime',
+    }
+
+    const normalizedType = shapeTypeMap[shapeType as keyof typeof shapeTypeMap] || shapeType
+    const dimensions = {
+      database: { w: 160, h: 200, color: 'green' },
+      user: { w: 120, h: 140, color: 'blue' },
+      server: { w: 240, h: 160, color: 'gray' },
+      llm: { w: 200, h: 160, color: 'purple' },
+      frontend: { w: 180, h: 140, color: 'red' },
+      gpt_realtime: { w: 220, h: 120, color: 'blue' },
+    }
+
+    const defaults = dimensions[normalizedType as keyof typeof dimensions] || { w: 200, h: 140, color: 'purple' }
+    const shapeId = `shape:${(globalThis as any).crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`}`
+    const shape = {
+      id: shapeId,
+      type: normalizedType,
+      x,
+      y,
+      props: {
+        ...defaults,
+        ...customProps,
+      },
+    }
+
+    editor.createShapes([shape])
+    return shape.id
+  }, [])
+
+  const handleApiKeySubmit = useCallback(async (submittedApiKey: string) => {
+    const connected = await connectRealtime(submittedApiKey)
+    if (connected) {
+      setApiKey(submittedApiKey)
+      setShowApiKeyModal(false)
+    }
+  }, [connectRealtime])
+
+  const handleTextToWhiteboard = useCallback(async () => {
+    if (!apiKey) {
+      setTextError('Add your Gemini API key before generating from text.')
+      setShowApiKeyModal(true)
+      return
+    }
+
+    const prompt = textPrompt.trim()
+    if (!prompt) {
+      setTextError('Please describe the architecture you want to draw.')
+      return
+    }
+
+    setIsTextGenerating(true)
+    setTextError(null)
+
+    try {
+      const ai = new GoogleGenAI({ apiKey })
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text: `You are an architecture-to-whiteboard planner. Convert the user request into a whiteboard JSON plan. Return only valid JSON, no markdown. Use this schema: { "components": [{ "id": "frontend", "type": "frontend", "label": "Example", "x": 120, "y": 140 }], "connections": [{ "from": "frontend", "to": "server", "direction": "one_way" }], "text": [{ "text": "User flow", "x": 120, "y": 520 }] } . Allowed component types: database, person, server, gpt_5, frontend, gpt_realtime. Keep shapes spread out with plenty of space. Use 1-6 components. Ensure JSON is parseable and coordinates are numbers.\n\nUser request:\n${prompt}`,
+              },
+            ],
+          },
+        ],
+        config: {
+          temperature: 0.5,
+          maxOutputTokens: 1200,
+        },
+      })
+
+      const content = response.text
+      if (!content) {
+        throw new Error('The model returned no diagram plan.')
+      }
+
+      const cleanContent = content.replace(/^```json\s*/i, '').replace(/```$/i, '').trim()
+      const jsonMatch = cleanContent.match(/\{[\s\S]*\}/)
+      const jsonText = jsonMatch ? jsonMatch[0] : cleanContent
+      const parsed = JSON.parse(jsonText)
+      const plan = parsed && typeof parsed === 'object' ? parsed : { components: [], connections: [], text: [] }
+
+      const editor = editorRef.current
+      if (!editor) {
+        throw new Error('Whiteboard editor is not ready yet.')
+      }
+
+      const shapeIdMap = new Map<string, string>()
+      const components = Array.isArray(plan.components) ? plan.components : []
+      const texts = Array.isArray(plan.text) ? plan.text : []
+
+      components.forEach((component: any, index: number) => {
+        const componentType = String(component.type || 'server').toLowerCase()
+        const fallbackX = 160 + (index % 3) * 260
+        const fallbackY = 140 + Math.floor(index / 3) * 220
+        const parsedX = Number(component.x)
+        const parsedY = Number(component.y)
+        const x = Number.isFinite(parsedX) ? parsedX : fallbackX
+        const y = Number.isFinite(parsedY) ? parsedY : fallbackY
+        const key = String(component.id ?? component.label ?? `${componentType}_${index}`)
+        // Do not spread optional AI values into tldraw props. In particular,
+        // `{ w: undefined, h: undefined }` overwrites the valid defaults and
+        // fails tldraw's JSON-serializable shape validation.
+        const customProps: Record<string, number> = {}
+        const width = Number(component.w)
+        const height = Number(component.h)
+        if (Number.isFinite(width) && width > 0) customProps.w = width
+        if (Number.isFinite(height) && height > 0) customProps.h = height
+
+        const createdId = createWhiteboardShape(componentType, x, y, customProps)
+
+        if (createdId) {
+          shapeIdMap.set(key, createdId)
+        }
+      })
+
+      const connections = Array.isArray(plan.connections) ? plan.connections : []
+      connections.forEach((connection: any) => {
+        const fromId = typeof connection.from === 'string' ? shapeIdMap.get(connection.from) || connection.from : null
+        const toId = typeof connection.to === 'string' ? shapeIdMap.get(connection.to) || connection.to : null
+        if (!fromId || !toId) return
+
+        const fromShape = editor.getShape?.(fromId)
+        const toShape = editor.getShape?.(toId)
+        if (!fromShape || !toShape) return
+
+        const fromCenter = { x: fromShape.x + (fromShape.props?.w ?? 0) / 2, y: fromShape.y + (fromShape.props?.h ?? 0) / 2 }
+        const toCenter = { x: toShape.x + (toShape.props?.w ?? 0) / 2, y: toShape.y + (toShape.props?.h ?? 0) / 2 }
+
+        const edgePointRect = (center: { x: number; y: number }, halfW: number, halfH: number, toward: { x: number; y: number }) => {
+          const dx = toward.x - center.x
+          const dy = toward.y - center.y
+          if (dx === 0 && dy === 0) return { x: center.x, y: center.y }
+          const tx = halfW / Math.abs(dx || 1e-9)
+          const ty = halfH / Math.abs(dy || 1e-9)
+          const t = Math.min(tx, ty)
+          return { x: center.x + dx * t, y: center.y + dy * t }
+        }
+
+        const edgePointEllipse = (center: { x: number; y: number }, halfW: number, halfH: number, toward: { x: number; y: number }) => {
+          const dx = toward.x - center.x
+          const dy = toward.y - center.y
+          if (dx === 0 && dy === 0) return { x: center.x, y: center.y }
+          const scale = 1 / Math.sqrt((dx * dx) / (halfW * halfW || 1e-9) + (dy * dy) / (halfH * halfH || 1e-9))
+          return { x: center.x + dx * scale, y: center.y + dy * scale }
+        }
+
+        const getEdgePoint = (shape: any, toward: { x: number; y: number }) => {
+          const center = { x: shape.x + (shape.props?.w ?? 0) / 2, y: shape.y + (shape.props?.h ?? 0) / 2 }
+          const hw = (shape.props?.w ?? 0) / 2
+          const hh = (shape.props?.h ?? 0) / 2
+          if (shape.type === 'server' || shape.type === 'gpt_realtime') {
+            return edgePointRect(center, hw, hh, toward)
+          }
+          return edgePointEllipse(center, hw, hh, toward)
+        }
+
+        const arrowId = `shape:connection_${Date.now()}_${Math.random().toString(36).slice(2)}`
+        const start = getEdgePoint(fromShape, toCenter)
+        const end = getEdgePoint(toShape, fromCenter)
+
+        editor.createShapes([{
+          id: arrowId,
+          type: 'arrow',
+          props: {
+            start,
+            end,
+            bend: 0,
+            color: 'black',
+            size: 'm',
+          },
+        }])
+
+        editor.createBindings([
+          {
+            id: `binding:${arrowId}_start`,
+            type: 'arrow',
+            fromId: arrowId,
+            toId: fromShape.id,
+            props: {
+              terminal: 'start',
+              isPrecise: false,
+              isExact: false,
+              normalizedAnchor: { x: 0.5, y: 0.5 },
+            },
+          },
+          {
+            id: `binding:${arrowId}_end`,
+            type: 'arrow',
+            fromId: arrowId,
+            toId: toShape.id,
+            props: {
+              terminal: 'end',
+              isPrecise: false,
+              isExact: false,
+              normalizedAnchor: { x: 0.5, y: 0.5 },
+            },
+          },
+        ])
+      })
+
+      texts.forEach((entry: any) => {
+        const textId = `shape:${(globalThis as any).crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`}`
+        editor.createShapes([{
+          id: textId,
+          type: 'text',
+          x: Number(entry.x ?? 100),
+          y: Number(entry.y ?? 100),
+          props: {
+            text: String(entry.text || 'Architecture Summary'),
+            size: 's',
+            color: 'black',
+          },
+        }])
+      })
+
+      architectureAnalysis.startOrResetAnalysisTimer()
+      setTextPrompt('')
+    } catch (e: any) {
+      console.error('Text-to-whiteboard generation error:', e)
+      setTextError(e?.message || 'Could not generate the whiteboard from the text prompt.')
+    } finally {
+      setIsTextGenerating(false)
+    }
+  }, [apiKey, architectureAnalysis, createWhiteboardShape, textPrompt])
+
+  const handleAcceptSuggestion = useCallback((suggestion: any) => {
+    const editor = editorRef.current
+    if (!editor) return
+
+    // Geometry helpers (same as in useGeminiRealtime)
+    const centerOf = (s: any) => ({
+      x: (s.x ?? 0) + ((s.props?.w ?? 0) / 2),
+      y: (s.y ?? 0) + ((s.props?.h ?? 0) / 2),
+    })
+
+    const edgePointRect = (center: { x: number; y: number }, halfW: number, halfH: number, toward: { x: number; y: number }) => {
+      const dx = toward.x - center.x
+      const dy = toward.y - center.y
+      if (dx === 0 && dy === 0) return { x: center.x, y: center.y }
+      const tx = halfW / Math.abs(dx || 1e-9)
+      const ty = halfH / Math.abs(dy || 1e-9)
+      const t = Math.min(tx, ty)
+      return { x: center.x + dx * t, y: center.y + dy * t }
+    }
+
+    const edgePointEllipse = (center: { x: number; y: number }, halfW: number, halfH: number, toward: { x: number; y: number }) => {
+      const dx = toward.x - center.x
+      const dy = toward.y - center.y
+      if (dx === 0 && dy === 0) return { x: center.x, y: center.y }
+      const scale = 1 / Math.sqrt((dx * dx) / (halfW * halfW || 1e-9) + (dy * dy) / (halfH * halfH || 1e-9))
+      return { x: center.x + dx * scale, y: center.y + dy * scale }
+    }
+
+    const edgePoint = (s: any, toward: { x: number; y: number }) => {
+      const c = centerOf(s)
+      const hw = (s.props?.w ?? 0) / 2
+      const hh = (s.props?.h ?? 0) / 2
+      
+      const shapeType = s.type
+      if (shapeType === 'server' || shapeType === 'gpt_realtime') {
+        return edgePointRect(c, hw, hh, toward)
+      } else if (shapeType === 'database' || shapeType === 'user' || shapeType === 'llm' || shapeType === 'frontend') {
+        return edgePointEllipse(c, hw, hh, toward)
+      }
+      return c
+    }
+
+    const uuid = (globalThis as any).crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`
+    const shapeId = `shape:${uuid}`
+    
+    // Map suggestion component types to shape types
+    const shapeTypeMap = {
+      'database': 'database',
+      'person': 'user', 
+      'server': 'server',
+      'gpt_5': 'llm',
+      'frontend': 'frontend',
+      'gpt_realtime': 'gpt_realtime',
+    }
+    
+    const shape = {
+      id: shapeId,
+      type: shapeTypeMap[suggestion.component_type as keyof typeof shapeTypeMap] || 'server',
+      x: Math.random() * 400 + 100,
+      y: Math.random() * 300 + 100,
+      props: {
+        w: suggestion.component_type === 'person' ? 120 : suggestion.component_type === 'database' ? 160 : suggestion.component_type === 'gpt_5' ? 200 : suggestion.component_type === 'frontend' ? 180 : suggestion.component_type === 'gpt_realtime' ? 220 : 240,
+        h: suggestion.component_type === 'person' ? 140 : suggestion.component_type === 'database' ? 200 : suggestion.component_type === 'gpt_5' ? 160 : suggestion.component_type === 'frontend' ? 140 : suggestion.component_type === 'gpt_realtime' ? 120 : 160,
+        color: suggestion.component_type === 'database' ? 'green' : suggestion.component_type === 'person' ? 'blue' : suggestion.component_type === 'server' ? 'gray' : suggestion.component_type === 'frontend' ? 'red' : suggestion.component_type === 'gpt_realtime' ? 'blue' : 'purple',
+      },
+    }
+    
+    editor.createShapes([shape])
+    
+    // Create connections if suggested
+    if (suggestion.connections && suggestion.connections.length > 0) {
+      const newShape = editor.getShape(shapeId)
+      
+      suggestion.connections.forEach((connection: any) => {
+        const targetShapeId = `shape:${connection.to_component_id}`
+        const targetShape = editor.getShape(targetShapeId)
+        
+        if (targetShape && newShape) {
+          // Determine connection direction
+          let fromShape, toShape, fromUuid, toUuid
+          if (connection.direction === 'to') {
+            fromShape = newShape
+            toShape = targetShape
+            fromUuid = uuid
+            toUuid = connection.to_component_id
+          } else if (connection.direction === 'from') {
+            fromShape = targetShape
+            toShape = newShape
+            fromUuid = connection.to_component_id
+            toUuid = uuid
+          } else {
+            // bidirectional - create one connection for now
+            fromShape = newShape
+            toShape = targetShape
+            fromUuid = uuid
+            toUuid = connection.to_component_id
+          }
+          
+          // Calculate edge points
+          const ca = centerOf(fromShape)
+          const cb = centerOf(toShape)
+          const start = edgePoint(fromShape, cb)
+          const end = edgePoint(toShape, ca)
+          
+          const arrowId = `shape:connection_${fromUuid}_${toUuid}`
+          
+          // Create arrow with bindings
+          editor.createShapes([{
+            id: arrowId,
+            type: 'arrow',
+            props: {
+              start,
+              end,
+              bend: 0,
+              color: 'black',
+              size: 'm',
+            },
+          }])
+
+          // Create bindings to make the arrow stick
+          editor.createBindings([
+            {
+              id: `binding:${arrowId}_start`,
+              type: 'arrow',
+              fromId: arrowId,
+              toId: fromShape.id,
+              props: {
+                terminal: 'start',
+                isPrecise: false,
+                isExact: false,
+                normalizedAnchor: { x: 0.5, y: 0.5 }
+              }
+            },
+            {
+              id: `binding:${arrowId}_end`,
+              type: 'arrow',
+              fromId: arrowId,
+              toId: toShape.id,
+              props: {
+                terminal: 'end',
+                isPrecise: false,
+                isExact: false,
+                normalizedAnchor: { x: 0.5, y: 0.5 }
+              }
+            }
+          ])
+          
+          console.log(`Created sticky connection: ${connection.description}`)
+        } else {
+          console.warn(`Target shape not found: ${targetShapeId}`)
+        }
+      })
+    }
+    
+    architectureAnalysis.dismissSuggestion(suggestion.id)
+    
+    // Queue a new analysis after adding the component
+    console.log('Running analysis after component addition')
+    architectureAnalysis.startOrResetAnalysisTimer()
+  }, [architectureAnalysis])
+
+  return (
+    <div style={{ position: 'relative', width: '100vw', height: '100vh' }}>
+      {showApiKeyModal && (
+        <ApiKeyModal
+          onApiKeySubmit={handleApiKeySubmit}
+          isLoading={isRealtimeConnecting}
+          error={realtimeError}
+        />
+      )}
+      {/* Status Bar */}
+      <div style={{
+        position: 'absolute',
+        bottom: 150,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 1000,
+        background: 'rgba(255, 255, 255, 0.9)',
+        padding: '8px 12px',
+        borderRadius: '8px',
+        fontSize: '14px',
+        display: 'flex',
+        gap: '12px',
+        alignItems: 'center',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button
+            onClick={isRealtimeConnected ? disconnectRealtime : () => setShowApiKeyModal(true)}
+            disabled={isRealtimeConnecting}
+            style={{
+              background: isRealtimeConnected ? '#ff4444' : '#4a7dff',
+              opacity: isRealtimeConnecting ? 0.7 : 1,
+              border: 'none',
+              color: 'white',
+              padding: '10px 16px',
+              borderRadius: '8px',
+              cursor: isRealtimeConnecting ? 'not-allowed' : 'pointer',
+              fontSize: '16px',
+            }}
+          >
+            {isRealtimeConnected ? 'Disconnect' : (isRealtimeConnecting ? 'Connecting...' : 'Connect')}
+          </button>
+          <button
+            onClick={toggleMute}
+            disabled={!isRealtimeConnected}
+            style={{
+              background: isMuted ? '#888' : '#222',
+              border: 'none',
+              color: 'white',
+              padding: '10px 16px',
+              borderRadius: '8px',
+              cursor: !isRealtimeConnected ? 'not-allowed' : 'pointer',
+              fontSize: '16px',
+            }}
+          >
+            {isMuted ? 'Unmute' : 'Mute'}
+          </button>
+          <span style={{ color: isRealtimeConnected ? 'green' : 'red' }}>
+            {isRealtimeConnected ? (isMuted ? 'Muted' : 'Unmuted') : 'Idle'}
+          </span>
+        </div>
+                {realtimeError && !showApiKeyModal ? (
+          <span style={{ color: '#cc0000' }}>{realtimeError}</span>
+        ) : null}
+        </div>
+
+      <InfoPopup />
+
+      {/* Text-to-Whiteboard Input */}
+      <div style={{
+        position: 'absolute',
+        top: 20,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 1000,
+        width: 340,
+        background: 'rgba(255,255,255,0.9)',
+        border: '1px solid rgba(0,0,0,0.08)',
+        borderRadius: '16px',
+        boxShadow: '0 10px 28px rgba(0,0,0,0.12)',
+        padding: '14px 14px 12px',
+      }}>
+        <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '8px', color: '#1f2937' }}>
+          Text-to-Whiteboard
+        </div>
+        <textarea
+          value={textPrompt}
+          onChange={(event) => setTextPrompt(event.target.value)}
+          placeholder={apiKey ? 'Describe your architecture, e.g. "A frontend connected to a server and a database"' : 'Add your API key first to enable text generation'}
+          disabled={!apiKey || isTextGenerating}
+          style={{
+            width: '100%',
+            minHeight: '90px',
+            resize: 'vertical',
+            borderRadius: '10px',
+            border: '1px solid rgba(0,0,0,0.14)',
+            padding: '10px 12px',
+            fontSize: '14px',
+            fontFamily: 'inherit',
+            boxSizing: 'border-box',
+            background: apiKey ? 'white' : '#f3f4f6',
+            color: '#111827',
+            marginBottom: '10px',
+          }}
+        />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+          <button
+            onClick={handleTextToWhiteboard}
+            disabled={!apiKey || isTextGenerating}
+            style={{
+              background: !apiKey || isTextGenerating ? '#9ca3af' : '#111827',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '10px 12px',
+              fontSize: '14px',
+              fontWeight: 600,
+              cursor: !apiKey || isTextGenerating ? 'not-allowed' : 'pointer',
+              flex: 1,
+            }}
+          >
+            {isTextGenerating ? 'Generating...' : 'Generate Board'}
+          </button>
+        </div>
+        {textError ? (
+          <div style={{ color: '#b91c1c', fontSize: '12px', marginTop: '8px' }}>{textError}</div>
+        ) : null}
+      </div>
+
+      {/* tldraw Canvas */}
+      <Tldraw 
+        shapeUtils={[DatabaseShapeUtil, ServerShapeUtil, UserShapeUtil, LLMShapeUtil, FrontendShapeUtil, GPTRealtimeShapeUtil]}
+        onMount={(editor) => {
+          // Provide editor to hooks
+          setEditorRealtime(editor)
+          editorRef.current = editor
+          architectureAnalysis.setEditor(editor)
+          console.log('tldraw editor mounted, setting up shape change listener...')
+          
+          // Listen for shape changes and trigger analysis when new components are added
+          editor.sideEffects.registerAfterCreateHandler('shape', (shape) => {
+            console.log('🎯 New shape created:', shape.type, shape.id)
+            
+            // Only trigger analysis for our custom component types, not arrows
+            if (['database', 'user', 'server', 'llm', 'frontend', 'gpt_realtime'].includes(shape.type)) {
+              console.log('🎯 Component added, queuing analysis in 10 seconds...')
+              architectureAnalysis.startOrResetAnalysisTimer()
+            }
+          })
+          
+          // Initial analysis if shapes already exist
+          setTimeout(() => {
+            const shapes = editor.getCurrentPageShapes()
+            console.log('Editor mounted, shapes:', shapes?.length || 0)
+            if (shapes && shapes.length > 0 && apiKey && !hasRunInitialAnalysis) {
+              console.log('Triggering initial analysis from onMount')
+              architectureAnalysis.startOrResetAnalysisTimer()
+              setHasRunInitialAnalysis(true)
+            }
+          }, 1000)
+        }}
+      />
+
+      {/* Architecture Suggestions Popup */}
+      <SuggestionsPopup
+        suggestions={architectureAnalysis.suggestions}
+        isAnalyzing={architectureAnalysis.isAnalyzing}
+        error={architectureAnalysis.error}
+        onDismiss={architectureAnalysis.dismissSuggestion}
+        onClearAll={architectureAnalysis.clearSuggestions}
+        onAcceptSuggestion={handleAcceptSuggestion}
+      />  
+    </div>
+  )
+}

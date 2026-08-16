@@ -1,0 +1,44 @@
+/* Import Google Fonts for Landing Page */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+}
+
+/* Shape color variables */
+:root {
+  /* Database colors */
+  --database-primary: 142 76% 36%;    /* Green */
+  --database-secondary: 142 76% 46%;  /* Lighter green */
+  --database-accent: 142 76% 26%;     /* Darker green */
+  
+  /* Server colors */
+  --server-primary: 220 9% 46%;       /* Gray */
+  --server-secondary: 220 9% 56%;     /* Lighter gray */
+  --server-accent: 220 9% 36%;        /* Darker gray */
+  
+  /* User colors */
+  --user-primary: 217 91% 60%;        /* Blue */
+  --user-secondary: 217 91% 70%;      /* Lighter blue */
+  --user-accent: 217 91% 50%;         /* Darker blue */
+  
+  /* LLM colors */
+  --llm-primary: 271 64% 71%;         /* Purple */
+  --llm-secondary: 271 64% 81%;       /* Lighter purple */
+  --llm-accent: 271 64% 61%;          /* Darker purple */
+
+  /* Frontend colors */
+  --frontend-primary: 0 85% 60%;           /* Red */
+  --frontend-secondary: 0 85% 70%;         /* Lighter red */
+  --frontend-accent: 0 85% 50%;            /* Darker red */
+}
