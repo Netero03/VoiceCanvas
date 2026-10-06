@@ -1,20 +1,21 @@
-import React, { useState } from 'react'
+import React from 'react'
 
-export function InfoPopup() {
-  const [isOpen, setIsOpen] = useState(false)
+interface InfoPopupProps {
+  isOpen: boolean
+  onToggle: () => void
+}
+
+export function InfoPopup({ isOpen, onToggle }: InfoPopupProps) {
 
   return (
-    <div style={styles.popup}>
+    <div className="inspiration-popover" style={styles.popup}>
       <button
-        onClick={() => setIsOpen((open) => !open)}
+        onClick={onToggle}
         style={styles.trigger}
         aria-expanded={isOpen}
         aria-controls="inspiration-content"
       >
-        <span>Need some inspiration?</span>
-        <span aria-hidden="true" style={{ fontSize: '18px', lineHeight: 1 }}>
-          {isOpen ? '⬆️' : '⬇️'}
-        </span>
+        <span>Need inspiration?</span>
       </button>
 
       {isOpen && (
@@ -39,34 +40,38 @@ export function InfoPopup() {
 
 const styles: { [key: string]: React.CSSProperties } = {
   popup: {
-    position: 'absolute',
-    top: '45%',
-    right: '20px',
-    transform: 'translateY(-0%)',
-    zIndex: 1000,
+    position: 'relative',
     background: 'white',
-    borderRadius: '12px',
-    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.1)',
-    width: '280px',
-    overflow: 'hidden',
+    borderRadius: '10px',
+    width: 'min(220px, 42vw)',
+    overflow: 'visible',
     fontFamily: 'system-ui, sans-serif',
   },
   trigger: {
     width: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    background: 'white',
-    color: '#111827',
-    border: 'none',
-    padding: '14px 16px',
-    fontSize: '16px',
+    display: 'block',
+    background: '#ffffff',
+    color: '#374151',
+    border: '1px solid #d1d5db',
+    borderRadius: '10px',
+    padding: '12px 16px',
+    fontSize: 'clamp(0.8rem, 1.7vw, 0.95rem)',
     fontWeight: 600,
     cursor: 'pointer',
-    textAlign: 'left',
+    textAlign: 'center',
+    whiteSpace: 'nowrap',
   },
   content: {
-    padding: '0 1.5rem 1.5rem',
+    position: 'absolute',
+    top: 'calc(100% + 10px)',
+    right: 0,
+    width: 'min(280px, calc(100vw - 32px))',
+    padding: '16px 20px 20px',
+    background: 'white',
+    borderRadius: '12px',
+    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.14)',
+    boxSizing: 'border-box',
+    zIndex: 2,
   },
   description: {
     margin: '0 0 0.5rem',

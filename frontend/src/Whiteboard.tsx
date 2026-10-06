@@ -23,6 +23,8 @@ export default function Whiteboard() {
   const [textPrompt, setTextPrompt] = useState('')
   const [isTextGenerating, setIsTextGenerating] = useState(false)
   const [textError, setTextError] = useState<string | null>(null)
+  const [isTextPanelOpen, setIsTextPanelOpen] = useState(false)
+  const [isInspirationPanelOpen, setIsInspirationPanelOpen] = useState(false)
   
   const architectureAnalysis = useArchitectureAnalysis(apiKey ?? '')
 
@@ -432,7 +434,7 @@ export default function Whiteboard() {
   }, [architectureAnalysis])
 
   return (
-    <div style={{ position: 'relative', width: '100vw', height: '100vh' }}>
+    <div className="whiteboard-page">
       {showApiKeyModal && (
         <ApiKeyModal
           onApiKeySubmit={handleApiKeySubmit}
@@ -440,26 +442,14 @@ export default function Whiteboard() {
           error={realtimeError}
         />
       )}
-      {/* Status Bar */}
-      <div style={{
-        position: 'absolute',
-        bottom: 150,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 1000,
-        background: 'rgba(255, 255, 255, 0.9)',
-        padding: '8px 12px',
-        borderRadius: '8px',
-        fontSize: '14px',
-        display: 'flex',
-        gap: '12px',
-        alignItems: 'center',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <section className="whiteboard-toolbar" aria-label="Whiteboard controls">
+        {/* Voice controls */}
+        <div className="whiteboard-status">
+        <div className="voice-controls">
           <button
             onClick={isRealtimeConnected ? disconnectRealtime : () => setShowApiKeyModal(true)}
             disabled={isRealtimeConnecting}
+            className={`connection-button ${isRealtimeConnected ? 'is-connected' : ''}`}
             style={{
               background: isRealtimeConnected ? '#ff4444' : '#4a7dff',
               opacity: isRealtimeConnecting ? 0.7 : 1,
@@ -476,6 +466,7 @@ export default function Whiteboard() {
           <button
             onClick={toggleMute}
             disabled={!isRealtimeConnected}
+            className="mute-button"
             style={{
               background: isMuted ? '#888' : '#222',
               border: 'none',
@@ -488,7 +479,7 @@ export default function Whiteboard() {
           >
             {isMuted ? 'Unmute' : 'Mute'}
           </button>
-          <span style={{ color: isRealtimeConnected ? 'green' : 'red' }}>
+          <span className={`connection-state ${isRealtimeConnected ? 'is-connected' : 'is-idle'}`}>
             {isRealtimeConnected ? (isMuted ? 'Muted' : 'Unmuted') : 'Idle'}
           </span>
         </div>
@@ -497,73 +488,53 @@ export default function Whiteboard() {
         ) : null}
         </div>
 
-      <InfoPopup />
-
-      {/* Text-to-Whiteboard Input */}
-      <div style={{
-        position: 'absolute',
-        top: 20,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 1000,
-        width: 340,
-        background: 'rgba(255,255,255,0.9)',
-        border: '1px solid rgba(0,0,0,0.08)',
-        borderRadius: '16px',
-        boxShadow: '0 10px 28px rgba(0,0,0,0.12)',
-        padding: '14px 14px 12px',
-      }}>
-        <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '8px', color: '#1f2937' }}>
-          Text-to-Whiteboard
+      <div className="whiteboard-tools">
+        <div className="text-tool">
+          <button
+            onClick={() => {
+              setIsTextPanelOpen((open) => !open)
+              setIsInspirationPanelOpen(false)
+            }}
+            className="text-tool-trigger"
+            aria-expanded={isTextPanelOpen}
+            aria-controls="text-to-whiteboard-content"
+          >
+            Text-to-whiteboard
+          </button>
+          {isTextPanelOpen && (
+            <div id="text-to-whiteboard-content" className="text-tool-panel">
+              <div className="text-tool-title">Describe what you want to draw</div>
+              <textarea
+                value={textPrompt}
+                onChange={(event) => setTextPrompt(event.target.value)}
+                placeholder={apiKey ? 'e.g. "A frontend connected to a server and a database"' : 'Add your API key first to enable text generation'}
+                disabled={!apiKey || isTextGenerating}
+              />
+              <button
+                onClick={handleTextToWhiteboard}
+                disabled={!apiKey || isTextGenerating}
+                className="generate-board-button"
+              >
+                {isTextGenerating ? 'Generating...' : 'Generate Board'}
+              </button>
+              {textError ? <div className="text-tool-error">{textError}</div> : null}
+            </div>
+          )}
         </div>
-        <textarea
-          value={textPrompt}
-          onChange={(event) => setTextPrompt(event.target.value)}
-          placeholder={apiKey ? 'Describe your architecture, e.g. "A frontend connected to a server and a database"' : 'Add your API key first to enable text generation'}
-          disabled={!apiKey || isTextGenerating}
-          style={{
-            width: '100%',
-            minHeight: '90px',
-            resize: 'vertical',
-            borderRadius: '10px',
-            border: '1px solid rgba(0,0,0,0.14)',
-            padding: '10px 12px',
-            fontSize: '14px',
-            fontFamily: 'inherit',
-            boxSizing: 'border-box',
-            background: apiKey ? 'white' : '#f3f4f6',
-            color: '#111827',
-            marginBottom: '10px',
+        <InfoPopup
+          isOpen={isInspirationPanelOpen}
+          onToggle={() => {
+            setIsInspirationPanelOpen((open) => !open)
+            setIsTextPanelOpen(false)
           }}
         />
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-          <button
-            onClick={handleTextToWhiteboard}
-            disabled={!apiKey || isTextGenerating}
-            style={{
-              background: !apiKey || isTextGenerating ? '#9ca3af' : '#111827',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              padding: '10px 12px',
-              fontSize: '14px',
-              fontWeight: 600,
-              cursor: !apiKey || isTextGenerating ? 'not-allowed' : 'pointer',
-              flex: 1,
-            }}
-          >
-            {isTextGenerating ? 'Generating...' : 'Generate Board'}
-          </button>
-        </div>
-        {textError ? (
-          <div style={{ color: '#b91c1c', fontSize: '12px', marginTop: '8px' }}>{textError}</div>
-        ) : null}
       </div>
+      </section>
 
-      {/* tldraw Canvas */}
-      <Tldraw 
-        shapeUtils={[DatabaseShapeUtil, ServerShapeUtil, UserShapeUtil, LLMShapeUtil, FrontendShapeUtil, GPTRealtimeShapeUtil]}
-        onMount={(editor) => {
+      <main className="whiteboard-board">
+        <Tldraw 
+          shapeUtils={[DatabaseShapeUtil, ServerShapeUtil, UserShapeUtil, LLMShapeUtil, FrontendShapeUtil, GPTRealtimeShapeUtil]}
+          onMount={(editor) => {
           // Provide editor to hooks
           setEditorRealtime(editor)
           editorRef.current = editor
@@ -591,18 +562,19 @@ export default function Whiteboard() {
               setHasRunInitialAnalysis(true)
             }
           }, 1000)
-        }}
-      />
+          }}
+        />
 
-      {/* Architecture Suggestions Popup */}
-      <SuggestionsPopup
-        suggestions={architectureAnalysis.suggestions}
-        isAnalyzing={architectureAnalysis.isAnalyzing}
-        error={architectureAnalysis.error}
-        onDismiss={architectureAnalysis.dismissSuggestion}
-        onClearAll={architectureAnalysis.clearSuggestions}
-        onAcceptSuggestion={handleAcceptSuggestion}
-      />  
+        {/* Architecture Suggestions Popup */}
+        <SuggestionsPopup
+          suggestions={architectureAnalysis.suggestions}
+          isAnalyzing={architectureAnalysis.isAnalyzing}
+          error={architectureAnalysis.error}
+          onDismiss={architectureAnalysis.dismissSuggestion}
+          onClearAll={architectureAnalysis.clearSuggestions}
+          onAcceptSuggestion={handleAcceptSuggestion}
+        />
+      </main>
     </div>
   )
 }
