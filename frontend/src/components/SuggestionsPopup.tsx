@@ -41,23 +41,6 @@ const getComponentIcon = (type: string) => {
   }
 }
 
-const getComponentColor = (type: string) => {
-  switch (type) {
-    case 'database':
-      return '#10b981' // green
-    case 'person':
-      return '#3b82f6' // blue
-    case 'server':
-      return '#6b7280' // gray
-    case 'gpt_5':
-      return '#8b5cf6' // purple
-    case 'gpt_realtime':
-      return '#3b82f6' // blue
-    default:
-      return '#64748b'
-  }
-}
-
 export function SuggestionsPopup({
   suggestions,
   isAnalyzing,
@@ -80,9 +63,9 @@ export function SuggestionsPopup({
       right: 10,
       zIndex: 1000,
       background: 'white',
-      border: '2px solid #3b82f6',
+      border: '1px solid rgba(129, 93, 205, 0.24)',
       borderRadius: '12px',
-      boxShadow: '0 10px 25px rgba(59, 130, 246, 0.25)',
+      boxShadow: '0 16px 36px rgba(74, 43, 161, 0.18)',
       width: '320px',
       maxHeight: '500px',
       overflow: 'hidden'
@@ -91,13 +74,13 @@ export function SuggestionsPopup({
       <div style={{
         padding: '16px',
         borderBottom: '1px solid #e5e7eb',
-        background: 'linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%)',
+        background: 'linear-gradient(135deg, #f5efff 0%, #fff0fa 100%)',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center'
       }}>
         <div>
-          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: '#111827' }}>
+          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: '#171b2d' }}>
             💡 Architecture Suggestions
           </h3>
         </div>
@@ -106,7 +89,7 @@ export function SuggestionsPopup({
             <button
               onClick={onClearAll}
               style={{
-                background: '#ef4444',
+                background: '#c2418a',
                 color: 'white',
                 border: 'none',
                 borderRadius: '6px',
@@ -126,8 +109,8 @@ export function SuggestionsPopup({
         {error && (
           <div style={{
             padding: '16px',
-            background: '#fef2f2',
-            color: '#dc2626',
+            background: '#fff0f7',
+            color: '#b04476',
             fontSize: '14px'
           }}>
             <strong>Error:</strong> {error}
@@ -138,7 +121,7 @@ export function SuggestionsPopup({
           <div style={{
             padding: '24px',
             textAlign: 'center',
-            color: '#6b7280'
+            color: '#667085'
           }}>
             <div style={{ fontSize: '24px', marginBottom: '8px' }}>✅</div>
             <p style={{ margin: 0, fontSize: '14px' }}>Architecture looks complete!</p>
@@ -164,7 +147,7 @@ export function SuggestionsPopup({
                   margin: 0,
                   fontSize: '13px',
                   fontWeight: '600',
-                  color: '#111827'
+                  color: '#171b2d'
                 }}>
                   {suggestion.title}
                 </h4>
@@ -188,7 +171,7 @@ export function SuggestionsPopup({
             <p style={{
               margin: '0 0 6px 0',
               fontSize: '12px',
-              color: '#4b5563',
+              color: '#5d5871',
               lineHeight: '1.3'
             }}>
               {suggestion.description}
@@ -198,11 +181,11 @@ export function SuggestionsPopup({
               <div style={{
                 margin: '0 0 8px 0',
                 fontSize: '10px',
-                color: '#059669',
-                background: '#ecfdf5',
+                color: '#3f8d68',
+                background: '#eefaf3',
                 padding: '2px 6px',
                 borderRadius: '3px',
-                border: '1px solid #d1fae5'
+                border: '1px solid #ccebd8'
               }}>
                 → {suggestion.connections.map(c => c.description).join(', ')}
               </div>
@@ -211,7 +194,7 @@ export function SuggestionsPopup({
             <button
               onClick={() => onAcceptSuggestion(suggestion)}
               style={{
-                background: getComponentColor(suggestion.component_type),
+                background: 'linear-gradient(135deg, #6437c7, #c13ca8)',
                 color: 'white',
                 border: 'none',
                 borderRadius: '6px',
