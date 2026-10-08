@@ -509,6 +509,9 @@ export default function Whiteboard() {
         />
       )}
       <section className="whiteboard-toolbar" aria-label="Whiteboard controls">
+        <a className="toolbar-brand" href="/whiteboard" aria-label="VoiceCanvas whiteboard">
+          <img src="/VoiceCanvasLogo.svg" alt="VoiceCanvas" />
+        </a>
         {/* Voice controls */}
         <div className="whiteboard-status">
         <div className="voice-controls">

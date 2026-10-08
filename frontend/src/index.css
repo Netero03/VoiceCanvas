@@ -1,10 +1,20 @@
 /* Import Google Fonts for Landing Page */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap");
 
 body {
   margin: 0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Roboto",
+    "Oxygen",
+    "Ubuntu",
+    "Cantarell",
+    "Fira Sans",
+    "Droid Sans",
+    "Helvetica Neue",
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -33,7 +43,13 @@ body {
   height: 100vh;
   overflow: hidden;
   color: var(--canvas-ink);
-  background: radial-gradient(ellipse at 50% 0%, rgba(242, 234, 255, 0.82), transparent 44%), #fff;
+  background:
+    radial-gradient(
+      ellipse at 50% 0%,
+      rgba(242, 234, 255, 0.82),
+      transparent 44%
+    ),
+    #fff;
 }
 
 button,
@@ -45,11 +61,12 @@ textarea {
   position: relative;
   flex: 0 0 auto;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: start;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
   column-gap: 20px;
   width: 100%;
-  height: 88px;
+  min-height: 88px;
+  height: auto;
   padding: 12px clamp(12px, 3vw, 36px);
   border-bottom: 1px solid var(--canvas-border);
   background: var(--canvas-glass);
@@ -57,6 +74,33 @@ textarea {
   box-sizing: border-box;
   overflow: visible;
   z-index: 1000;
+}
+
+.toolbar-brand {
+  grid-column: 1;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  width: min(170px, 20vw);
+  min-width: 112px;
+  height: 52px;
+  border-radius: 10px;
+  transition:
+    opacity 150ms ease,
+    transform 150ms ease;
+}
+
+.toolbar-brand:hover,
+.toolbar-brand:focus-visible {
+  opacity: 0.82;
+  transform: translateY(-1px);
+}
+
+.toolbar-brand img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .whiteboard-board {
@@ -68,7 +112,8 @@ textarea {
 }
 
 .whiteboard-status {
-  justify-self: start;
+  grid-column: 2;
+  justify-self: center;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -81,10 +126,13 @@ textarea {
   box-shadow: 0 8px 24px rgba(74, 43, 161, 0.08);
   box-sizing: border-box;
   font-size: 13px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .whiteboard-status > div {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
@@ -100,7 +148,9 @@ textarea {
   border-radius: 8px !important;
   font-size: 13px !important;
   font-weight: 600;
-  transition: filter 150ms ease, transform 150ms ease;
+  transition:
+    filter 150ms ease,
+    transform 150ms ease;
 }
 
 .whiteboard-status button:hover:not(:disabled) {
@@ -135,12 +185,14 @@ textarea {
 
 .whiteboard-tools {
   position: relative;
-  grid-column: 2;
+  grid-column: 3;
+  justify-self: end;
   display: flex;
   align-items: flex-start;
   justify-content: center;
   gap: 10px;
   width: auto;
+  min-width: 0;
 }
 
 .text-tool {
@@ -230,26 +282,84 @@ textarea {
   font-size: 12px;
 }
 
+@media (max-width: 900px) {
+  .whiteboard-toolbar {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "brand status"
+      "tools tools";
+    row-gap: 10px;
+    min-height: 132px;
+    padding: 10px clamp(12px, 3vw, 24px);
+    
+  }
+
+  .toolbar-brand {
+    grid-area: brand;
+    width: min(170px, 28vw);
+  }
+
+  .whiteboard-status {
+    grid-area: status;
+    grid-column: auto;
+    justify-self: end;
+  }
+
+  .whiteboard-tools {
+    grid-area: tools;
+    grid-column: 1;
+    justify-self: stretch;
+    
+  }
+
+  .text-tool-panel {
+    left: auto;
+    right: 0;
+    transform: none;
+  }
+}
+
 @media (max-width: 600px) {
   .whiteboard-toolbar {
-    height: 128px;
+    height: auto;
+    min-height: 176px;
     padding: 10px;
-    display: block;
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "brand"
+      "status"
+      "tools";
+    row-gap: 8px;
+  }
+
+  .toolbar-brand {
+    grid-area: brand;
+    justify-self: center;
+    width: min(170px, 48vw);
+    min-width: 120px;
+    height: 38px;
   }
 
   .whiteboard-status,
   .whiteboard-tools {
     width: 100%;
     box-sizing: border-box;
+    justify-content: center;  
   }
 
   .whiteboard-status {
-    margin-bottom: 8px;
+    grid-area: status;
+    grid-column: auto;
+    justify-self: center;
+    margin-bottom: 5px;
   }
 
   .whiteboard-tools {
+    grid-area: tools;
     grid-column: auto;
-    gap: 8px;
+    justify-self: stretch;
+    gap: 5px;
     justify-content: center;
     display: flex;
   }
@@ -272,27 +382,27 @@ textarea {
 /* Shape color variables */
 :root {
   /* Database colors */
-  --database-primary: 142 76% 36%;    /* Green */
-  --database-secondary: 142 76% 46%;  /* Lighter green */
-  --database-accent: 142 76% 26%;     /* Darker green */
-  
+  --database-primary: 142 76% 36%; /* Green */
+  --database-secondary: 142 76% 46%; /* Lighter green */
+  --database-accent: 142 76% 26%; /* Darker green */
+
   /* Server colors */
-  --server-primary: 220 9% 46%;       /* Gray */
-  --server-secondary: 220 9% 56%;     /* Lighter gray */
-  --server-accent: 220 9% 36%;        /* Darker gray */
-  
+  --server-primary: 220 9% 46%; /* Gray */
+  --server-secondary: 220 9% 56%; /* Lighter gray */
+  --server-accent: 220 9% 36%; /* Darker gray */
+
   /* User colors */
-  --user-primary: 217 91% 60%;        /* Blue */
-  --user-secondary: 217 91% 70%;      /* Lighter blue */
-  --user-accent: 217 91% 50%;         /* Darker blue */
-  
+  --user-primary: 217 91% 60%; /* Blue */
+  --user-secondary: 217 91% 70%; /* Lighter blue */
+  --user-accent: 217 91% 50%; /* Darker blue */
+
   /* LLM colors */
-  --llm-primary: 271 64% 71%;         /* Purple */
-  --llm-secondary: 271 64% 81%;       /* Lighter purple */
-  --llm-accent: 271 64% 61%;          /* Darker purple */
+  --llm-primary: 271 64% 71%; /* Purple */
+  --llm-secondary: 271 64% 81%; /* Lighter purple */
+  --llm-accent: 271 64% 61%; /* Darker purple */
 
   /* Frontend colors */
-  --frontend-primary: 0 85% 60%;           /* Red */
-  --frontend-secondary: 0 85% 70%;         /* Lighter red */
-  --frontend-accent: 0 85% 50%;            /* Darker red */
+  --frontend-primary: 0 85% 60%; /* Red */
+  --frontend-secondary: 0 85% 70%; /* Lighter red */
+  --frontend-accent: 0 85% 50%; /* Darker red */
 }
