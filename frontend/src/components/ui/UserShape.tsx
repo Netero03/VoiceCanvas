@@ -7,6 +7,8 @@ export type UserShape = TLBaseShape<
     w: number
     h: number
     color: string
+    componentNumber?: number
+    displayName?: string
   }
 >
 
@@ -19,7 +21,9 @@ export class UserShapeUtil extends BaseBoxShapeUtil<UserShape> {
     return {
       w: 120,
       h: 140,
-      color: 'blue'
+      color: 'blue',
+      componentNumber: 1,
+      displayName: 'Person 1'
     }
   }
 
@@ -114,7 +118,7 @@ export class UserShapeUtil extends BaseBoxShapeUtil<UserShape> {
             fontFamily="system-ui, -apple-system, sans-serif"
             fontWeight="500"
           >
-            User
+            {shape.props.displayName || `Person ${shape.props.componentNumber || 1}`}
           </text>
         </svg>
       </HTMLContainer>

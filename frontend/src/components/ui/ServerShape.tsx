@@ -7,6 +7,8 @@ export type ServerShape = TLBaseShape<
     w: number
     h: number
     color: string
+    componentNumber?: number
+    displayName?: string
   }
 >
 
@@ -19,7 +21,9 @@ export class ServerShapeUtil extends BaseBoxShapeUtil<ServerShape> {
     return {
       w: 240,
       h: 160,
-      color: 'gray'
+      color: 'gray',
+      componentNumber: 1,
+      displayName: 'Server 1'
     }
   }
 
@@ -123,7 +127,7 @@ export class ServerShapeUtil extends BaseBoxShapeUtil<ServerShape> {
             fontFamily="system-ui, sans-serif"
             fontWeight="bold"
           >
-            Server
+            {shape.props.displayName || `Server ${shape.props.componentNumber || 1}`}
           </text>
         </svg>
       </HTMLContainer>

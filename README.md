@@ -118,10 +118,15 @@ The AI agent understands natural language. Here are some example phrases:
 
 **Managing Shapes:**
 - "Delete the database"
+- "Delete database 2"
+- "Move server 1 to the top right"
+- "Rename frontend 1 to Customer Portal"
 - "Remove the server"
 
 **Adding Text:**
 - "Add the following text at the bottom right..."
+
+Each drawn component receives a stable number per type, such as `Database 1`, `Database 2`, `Server 1`, and `Server 2`. These names are displayed on the canvas and let both speech and text commands target existing components for read, update, and delete operations. Connected arrows are removed when their component is deleted.
 
 ### AI Suggestions Feature
 

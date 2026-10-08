@@ -7,6 +7,8 @@ export type LLMShape = TLBaseShape<
     w: number
     h: number
     color: string
+    componentNumber?: number
+    displayName?: string
   }
 >
 
@@ -19,7 +21,9 @@ export class LLMShapeUtil extends BaseBoxShapeUtil<LLMShape> {
     return {
       w: 200,
       h: 160,
-      color: 'purple'
+      color: 'purple',
+      componentNumber: 1,
+      displayName: 'GPT 5 1'
     }
   }
 
@@ -82,7 +86,7 @@ export class LLMShapeUtil extends BaseBoxShapeUtil<LLMShape> {
             fontFamily="system-ui, sans-serif"
             fontWeight="bold"
           >
-            GPT 5
+            {shape.props.displayName || `GPT 5 ${shape.props.componentNumber || 1}`}
           </text>
         </svg>
       </HTMLContainer>

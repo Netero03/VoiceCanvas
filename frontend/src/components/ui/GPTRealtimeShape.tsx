@@ -7,6 +7,8 @@ export type GPTRealtimeShape = TLBaseShape<
     w: number
     h: number
     color: string
+    componentNumber?: number
+    displayName?: string
   }
 >
 
@@ -19,7 +21,9 @@ export class GPTRealtimeShapeUtil extends BaseBoxShapeUtil<GPTRealtimeShape> {
     return {
       w: 220,
       h: 120,
-      color: 'blue'
+      color: 'blue',
+      componentNumber: 1,
+      displayName: 'GPT Realtime 1'
     }
   }
 
@@ -159,7 +163,7 @@ export class GPTRealtimeShapeUtil extends BaseBoxShapeUtil<GPTRealtimeShape> {
             fontFamily="system-ui, sans-serif"
             fontWeight="bold"
           >
-            GPT Realtime
+            {shape.props.displayName || `GPT Realtime ${shape.props.componentNumber || 1}`}
           </text>
         </svg>
       </HTMLContainer>

@@ -7,6 +7,8 @@ export type FrontendShape = TLBaseShape<
     w: number
     h: number
     color: string
+    componentNumber?: number
+    displayName?: string
   }
 >
 
@@ -19,7 +21,9 @@ export class FrontendShapeUtil extends BaseBoxShapeUtil<FrontendShape> {
     return {
       w: 180,
       h: 140,
-      color: 'red'
+      color: 'red',
+      componentNumber: 1,
+      displayName: 'Frontend 1'
     }
   }
 
@@ -188,7 +192,7 @@ export class FrontendShapeUtil extends BaseBoxShapeUtil<FrontendShape> {
             fontFamily="system-ui, -apple-system, sans-serif"
             fontWeight="500"
           >
-            Frontend
+            {shape.props.displayName || `Frontend ${shape.props.componentNumber || 1}`}
           </text>
         </svg>
       </HTMLContainer>

@@ -15,7 +15,7 @@ import { InfoPopup } from './components/InfoPopup'
 import { GoogleGenAI } from '@google/genai'
 
 export default function Whiteboard() {
-  const { isRealtimeConnected, isRealtimeConnecting, isMuted, error: realtimeError, connectRealtime, disconnectRealtime, toggleMute, setEditor: setEditorRealtime } = useGeminiRealtime()
+  const { isRealtimeConnected, isRealtimeConnecting, isMuted, error: realtimeError, connectRealtime, disconnectRealtime, toggleMute, setEditor: setEditorRealtime, executeToolCall } = useGeminiRealtime()
   const editorRef = useRef<any>(null)
 
   const [apiKey, setApiKey] = useState<string | null>(null)
@@ -58,6 +58,20 @@ export default function Whiteboard() {
 
     const defaults = dimensions[normalizedType as keyof typeof dimensions] || { w: 200, h: 140, color: 'purple' }
     const shapeId = `shape:${(globalThis as any).crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`}`
+    const existingShapes = editor.getCurrentPageShapes()
+    const componentNumber = existingShapes
+      .filter((existingShape: any) => existingShape.props?.componentType === shapeType)
+      .map((existingShape: any) => Number(existingShape.props?.componentNumber))
+      .filter((number: number) => Number.isFinite(number))
+      .reduce((highest: number, number: number) => Math.max(highest, number), 0) + 1
+    const itemNames: Record<string, string> = {
+      database: 'Database',
+      person: 'Person',
+      server: 'Server',
+      gpt_5: 'GPT 5',
+      frontend: 'Frontend',
+      gpt_realtime: 'GPT Realtime',
+    }
     const shape = {
       id: shapeId,
       type: normalizedType,
@@ -66,6 +80,9 @@ export default function Whiteboard() {
       props: {
         ...defaults,
         ...customProps,
+        componentType: shapeType,
+        componentNumber,
+        displayName: `${itemNames[shapeType] || shapeType} ${componentNumber}`,
       },
     }
 
@@ -99,6 +116,7 @@ export default function Whiteboard() {
 
     try {
       const ai = new GoogleGenAI({ apiKey })
+      const existingItems = await executeToolCall({ name: 'list_items', args: {} })
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: [
@@ -106,7 +124,7 @@ export default function Whiteboard() {
             role: 'user',
             parts: [
               {
-                text: `You are an architecture-to-whiteboard planner. Convert the user request into a whiteboard JSON plan. Return only valid JSON, no markdown. Use this schema: { "components": [{ "id": "frontend", "type": "frontend", "label": "Example", "x": 120, "y": 140 }], "connections": [{ "from": "frontend", "to": "server", "direction": "one_way" }], "text": [{ "text": "User flow", "x": 120, "y": 520 }] } . Allowed component types: database, person, server, gpt_5, frontend, gpt_realtime. Keep shapes spread out with plenty of space. Use 1-6 components. Ensure JSON is parseable and coordinates are numbers.\n\nUser request:\n${prompt}`,
+                text: `You are a whiteboard CRUD command planner. Convert the user's request into a JSON list of operations and return only valid JSON, no markdown. Use this schema: { "operations": [{ "name": "draw_item", "args": { "request_id": "database_new", "item_type": "database", "x": 120, "y": 140 } }] }. Allowed operation names are draw_item, connect, list_items, update_item, delete_item, and add_text. Allowed component types are database, person, server, gpt_5, frontend, and gpt_realtime. For existing numbered components, use item_type and item_number, for example delete_item with { "item_type": "database", "item_number": 1 }. For components created in this same request, give draw_item a request_id and refer to that new component from connect or update_item using item_request_id, item1_request_id, or item2_request_id. Keep shapes spread out. Include only the operations needed. Existing numbered components are: ${JSON.stringify(existingItems)}\n\nUser request:\n${prompt}`,
               },
             ],
           },
@@ -131,6 +149,43 @@ export default function Whiteboard() {
       const editor = editorRef.current
       if (!editor) {
         throw new Error('Whiteboard editor is not ready yet.')
+      }
+
+      const operations = Array.isArray(plan.operations) ? plan.operations : []
+      if (operations.length > 0) {
+        const createdItemIds = new Map<string, string>()
+
+        for (const operation of operations) {
+          const operationName = String(operation?.name || operation?.tool || '')
+          if (!operationName) continue
+
+          const operationArgs = { ...(operation.args || {}) }
+          const requestId = typeof operationArgs.request_id === 'string' ? operationArgs.request_id : null
+          delete operationArgs.request_id
+
+          if (operationArgs.item_request_id) {
+            operationArgs.item_uuid = createdItemIds.get(String(operationArgs.item_request_id))
+            delete operationArgs.item_request_id
+          }
+          if (operationArgs.item1_request_id) {
+            operationArgs.item1_uuid = createdItemIds.get(String(operationArgs.item1_request_id))
+            delete operationArgs.item1_request_id
+          }
+          if (operationArgs.item2_request_id) {
+            operationArgs.item2_uuid = createdItemIds.get(String(operationArgs.item2_request_id))
+            delete operationArgs.item2_request_id
+          }
+
+          const result: any = await executeToolCall({ name: operationName, args: operationArgs })
+          if (result?.error) throw new Error(result.error)
+          if (operationName === 'draw_item' && requestId && typeof result === 'string') {
+            createdItemIds.set(requestId, result)
+          }
+        }
+
+        architectureAnalysis.startOrResetAnalysisTimer()
+        setTextPrompt('')
+        return
       }
 
       const shapeIdMap = new Map<string, string>()
@@ -270,7 +325,7 @@ export default function Whiteboard() {
     } finally {
       setIsTextGenerating(false)
     }
-  }, [apiKey, architectureAnalysis, createWhiteboardShape, textPrompt])
+  }, [apiKey, architectureAnalysis, createWhiteboardShape, executeToolCall, textPrompt])
 
   const handleAcceptSuggestion = useCallback((suggestion: any) => {
     const editor = editorRef.current
@@ -336,6 +391,17 @@ export default function Whiteboard() {
         w: suggestion.component_type === 'person' ? 120 : suggestion.component_type === 'database' ? 160 : suggestion.component_type === 'gpt_5' ? 200 : suggestion.component_type === 'frontend' ? 180 : suggestion.component_type === 'gpt_realtime' ? 220 : 240,
         h: suggestion.component_type === 'person' ? 140 : suggestion.component_type === 'database' ? 200 : suggestion.component_type === 'gpt_5' ? 160 : suggestion.component_type === 'frontend' ? 140 : suggestion.component_type === 'gpt_realtime' ? 120 : 160,
         color: suggestion.component_type === 'database' ? 'green' : suggestion.component_type === 'person' ? 'blue' : suggestion.component_type === 'server' ? 'gray' : suggestion.component_type === 'frontend' ? 'red' : suggestion.component_type === 'gpt_realtime' ? 'blue' : 'purple',
+        componentType: suggestion.component_type,
+        componentNumber: editor.getCurrentPageShapes()
+          .filter((existingShape: any) => existingShape.props?.componentType === suggestion.component_type)
+          .map((existingShape: any) => Number(existingShape.props?.componentNumber))
+          .filter((number: number) => Number.isFinite(number))
+          .reduce((highest: number, number: number) => Math.max(highest, number), 0) + 1,
+        displayName: `${suggestion.component_type === 'database' ? 'Database' : suggestion.component_type === 'person' ? 'Person' : suggestion.component_type === 'server' ? 'Server' : suggestion.component_type === 'frontend' ? 'Frontend' : suggestion.component_type === 'gpt_realtime' ? 'GPT Realtime' : 'GPT 5'} ${editor.getCurrentPageShapes()
+          .filter((existingShape: any) => existingShape.props?.componentType === suggestion.component_type)
+          .map((existingShape: any) => Number(existingShape.props?.componentNumber))
+          .filter((number: number) => Number.isFinite(number))
+          .reduce((highest: number, number: number) => Math.max(highest, number), 0) + 1}`,
       },
     }
     
@@ -507,7 +573,7 @@ export default function Whiteboard() {
               <textarea
                 value={textPrompt}
                 onChange={(event) => setTextPrompt(event.target.value)}
-                placeholder={apiKey ? 'e.g. "A frontend connected to a server and a database"' : 'Add your API key first to enable text generation'}
+                placeholder={apiKey ? 'e.g. "Create a frontend connected to server 1, then delete database 2"' : 'Add your API key first to enable text generation'}
                 disabled={!apiKey || isTextGenerating}
               />
               <button

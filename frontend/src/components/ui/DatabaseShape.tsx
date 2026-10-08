@@ -7,6 +7,8 @@ export type DatabaseShape = TLBaseShape<
     w: number
     h: number
     color: string
+    componentNumber?: number
+    displayName?: string
   }
 >
 
@@ -19,7 +21,9 @@ export class DatabaseShapeUtil extends BaseBoxShapeUtil<DatabaseShape> {
     return {
       w: 160,
       h: 200,
-      color: 'green'
+      color: 'green',
+      componentNumber: 1,
+      displayName: 'Database 1'
     }
   }
 
@@ -118,7 +122,7 @@ export class DatabaseShapeUtil extends BaseBoxShapeUtil<DatabaseShape> {
             fontFamily="system-ui, sans-serif"
             fontWeight="bold"
           >
-            Database
+            {shape.props.displayName || `Database ${shape.props.componentNumber || 1}`}
           </text>
         </svg>
       </HTMLContainer>

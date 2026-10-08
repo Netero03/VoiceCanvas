@@ -13,6 +13,7 @@ interface UseGeminiRealtimeState {
   disconnectRealtime: () => void
   toggleMute: () => void
   setEditor: (editor: any) => void
+  executeToolCall: (toolCall: ToolCallLike) => Promise<unknown>
 }
 
 type WhiteboardItemType = 'database' | 'person' | 'server' | 'gpt_5' | 'frontend' | 'gpt_realtime'
@@ -38,7 +39,7 @@ export function useGeminiRealtime(): UseGeminiRealtimeState {
 
 
   const SYSTEM_PROMPT =
-    'You are Rubber Ducky Bot. The user is discussing how their system architecture will look. When the user asks to draw, add, connect, delete, or label anything on the whiteboard, you MUST execute the appropriate tool calls immediately. Do not merely describe the change or ask for confirmation. For a request to draw a database and a server and connect them, first call draw_item for each item, then use the UUIDs returned by the tool responses to call connect. If they go on a longwinded rant about the different components of their system, write that on the side, using dashes as bullet points. It will be a briefer version of what they want. Be brief and concise, but kind and friendly. Interpret spoken instructions as immediate tool calls. If they describe what their product is going to be at a high level, also add text that explains that with bullet points.' +
+    'You are Rubber Ducky Bot. The user is discussing how their system architecture will look. When the user asks to draw, add, connect, delete, update, or label anything on the whiteboard, you MUST execute the appropriate tool calls immediately. Do not merely describe the change or ask for confirmation. For a request to draw a database and a server and connect them, first call draw_item for each item, then use the UUIDs returned by the tool responses to call connect. Use list_items whenever you need to identify an existing component. Components have stable names such as Database 1, Database 2, Server 1, and Server 2. For requests like "delete database 2", pass item_type database and item_number 2 to delete_item. If a request matches more than one item, ask the user to clarify instead of guessing. If they go on a longwinded rant about the different components of their system, write that on the side, using dashes as bullet points. It will be a briefer version of what they want. Be brief and concise, but kind and friendly. Interpret spoken instructions as immediate tool calls. If they describe what their product is going to be at a high level, also add text that explains that with bullet points.' +
     'Do not wait for full sentences if a coherent unit of action is clear. ' +
     'Allowed item types: database, person, server, gpt_5, frontend, gpt_realtime. Return UUIDs from draw_item and reuse them.' +
     'Don\'t be too chatty. Just do what the user asks for, with brief responses.' + 
@@ -82,6 +83,88 @@ export function useGeminiRealtime(): UseGeminiRealtimeState {
     return c
   }
 
+  const shapeTypeMap = {
+    database: 'database',
+    person: 'user',
+    server: 'server',
+    gpt_5: 'llm',
+    frontend: 'frontend',
+    gpt_realtime: 'gpt_realtime',
+  } as const
+
+  const itemNameMap = {
+    database: 'Database',
+    person: 'Person',
+    server: 'Server',
+    gpt_5: 'GPT 5',
+    frontend: 'Frontend',
+    gpt_realtime: 'GPT Realtime',
+  } as const
+
+  const getItems = () => {
+    const editor = editorRef.current
+    if (!editor) return []
+
+    return editor.getCurrentPageShapes().filter((shape: any) => Object.values(shapeTypeMap).includes(shape.type))
+  }
+
+  const getNextItemNumber = (itemType: WhiteboardItemType) => {
+    const numbers = getItems()
+      .filter((shape: any) => shape.props?.componentType === itemType)
+      .map((shape: any) => Number(shape.props?.componentNumber))
+      .filter((number: number) => Number.isFinite(number))
+
+    return numbers.length ? Math.max(...numbers) + 1 : 1
+  }
+
+  const getItemType = (shape: any): WhiteboardItemType | null => {
+    if (shape.props?.componentType && shape.props.componentType in itemNameMap) {
+      return shape.props.componentType as WhiteboardItemType
+    }
+
+    const entry = Object.entries(shapeTypeMap).find(([, shapeType]) => shapeType === shape.type)
+    return (entry?.[0] as WhiteboardItemType | undefined) ?? null
+  }
+
+  const normalizeItemType = (value: unknown): WhiteboardItemType | undefined => {
+    const normalized = String(value || '').trim().toLowerCase().replace(/[_-]+/g, ' ')
+    const aliases: Record<string, WhiteboardItemType> = {
+      database: 'database',
+      db: 'database',
+      person: 'person',
+      user: 'person',
+      server: 'server',
+      'gpt 5': 'gpt_5',
+      gpt5: 'gpt_5',
+      llm: 'gpt_5',
+      frontend: 'frontend',
+      'gpt realtime': 'gpt_realtime',
+      gptrealtime: 'gpt_realtime',
+    }
+    return aliases[normalized]
+  }
+
+  const findItem = (args: { item_uuid?: string; item_type?: WhiteboardItemType | string; item_number?: number | string }) => {
+    const items = getItems()
+    if (args.item_uuid) {
+      const directMatch = items.find((shape: any) => shape.id === `shape:${args.item_uuid}` || shape.id === args.item_uuid)
+      if (directMatch) return directMatch
+
+      const spokenTarget = String(args.item_uuid).trim().match(/^(.+?)\s*(?:#|number\s*)?(\d+)$/i)
+      if (spokenTarget) {
+        args = {
+          ...args,
+          item_type: normalizeItemType(spokenTarget[1]),
+          item_number: Number(spokenTarget[2]),
+        }
+      }
+    }
+
+    const itemNumber = Number(args.item_number)
+    const itemType = normalizeItemType(args.item_type)
+    return items.find((shape: any) => getItemType(shape) === itemType && Number(shape.props?.componentNumber) === itemNumber)
+  }
+
   const drawItem = useCallback(async ({ item_type, x, y }: { item_type: WhiteboardItemType; x: number; y: number }) => {
     const editor = editorRef.current
     if (!editor) throw new Error('Editor not initialised')
@@ -89,14 +172,7 @@ export function useGeminiRealtime(): UseGeminiRealtimeState {
     const uuid = (globalThis as any).crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`
     const shapeId = `shape:${uuid}`
 
-    const shapeTypeMap = {
-      database: 'database',
-      person: 'user',
-      server: 'server',
-      gpt_5: 'llm',
-      frontend: 'frontend',
-      gpt_realtime: 'gpt_realtime',
-    }
+    const componentNumber = getNextItemNumber(item_type)
 
     const shape = {
       id: shapeId,
@@ -107,6 +183,9 @@ export function useGeminiRealtime(): UseGeminiRealtimeState {
         w: item_type === 'person' ? 120 : item_type === 'database' ? 160 : item_type === 'gpt_5' ? 200 : item_type === 'frontend' ? 180 : item_type === 'gpt_realtime' ? 220 : 240,
         h: item_type === 'person' ? 140 : item_type === 'database' ? 200 : item_type === 'gpt_5' ? 160 : item_type === 'frontend' ? 140 : item_type === 'gpt_realtime' ? 120 : 160,
         color: item_type === 'database' ? 'green' : item_type === 'person' ? 'blue' : item_type === 'server' ? 'gray' : item_type === 'frontend' ? 'red' : item_type === 'gpt_realtime' ? 'blue' : 'purple',
+        componentType: item_type,
+        componentNumber,
+        displayName: `${itemNameMap[item_type]} ${componentNumber}`,
       },
     }
 
@@ -220,13 +299,44 @@ export function useGeminiRealtime(): UseGeminiRealtimeState {
     return 'ok'
   }, [])
 
-  const deleteItem = useCallback(async ({ item_uuid }: { item_uuid: string }) => {
+  const listItems = useCallback(async () => {
+    return getItems().map((shape: any) => ({
+      uuid: shape.id.replace(/^shape:/, ''),
+      type: getItemType(shape),
+      number: shape.props?.componentNumber,
+      name: shape.props?.displayName,
+      position: { x: shape.x, y: shape.y },
+    }))
+  }, [])
+
+  const updateItem = useCallback(async ({ item_uuid, item_type, item_number, x, y, label }: { item_uuid?: string; item_type?: WhiteboardItemType; item_number?: number; x?: number; y?: number; label?: string }) => {
     const editor = editorRef.current
     if (!editor) throw new Error('Editor not initialised')
 
-    const shape = editor.getShape?.(`shape:${item_uuid}`)
-    if (shape) editor.deleteShapes([shape.id])
-    return 'ok'
+    const shape = findItem({ item_uuid, item_type, item_number })
+    if (!shape) return { error: 'Item not found. Use list_items to inspect current component names.' }
+
+    editor.updateShapes([{
+      id: shape.id,
+      type: shape.type,
+      x: Number.isFinite(Number(x)) ? Number(x) : shape.x,
+      y: Number.isFinite(Number(y)) ? Number(y) : shape.y,
+      props: label ? { displayName: label } : {},
+    }])
+    return { ok: true, name: shape.props?.displayName }
+  }, [])
+
+  const deleteItem = useCallback(async ({ item_uuid, item_type, item_number }: { item_uuid?: string; item_type?: WhiteboardItemType; item_number?: number }) => {
+    const editor = editorRef.current
+    if (!editor) throw new Error('Editor not initialised')
+
+    const shape = findItem({ item_uuid, item_type, item_number })
+    if (!shape) return { error: 'Item not found. Use list_items to inspect current component names.' }
+
+    const bindings = editor.getBindingsToShape?.(shape.id) || []
+    const arrowIds = bindings.map((binding: any) => binding.fromId).filter(Boolean)
+    editor.deleteShapes([...arrowIds, shape.id])
+    return { ok: true, deleted: shape.props?.displayName }
   }, [])
 
   const addText = useCallback(async ({ text, x, y }: { text: string; x: number; y: number }) => {
@@ -270,6 +380,10 @@ export function useGeminiRealtime(): UseGeminiRealtimeState {
         return drawItem(parsedArgs)
       case 'connect':
         return connectItems(parsedArgs)
+      case 'list_items':
+        return listItems()
+      case 'update_item':
+        return updateItem(parsedArgs)
       case 'delete_item':
         return deleteItem(parsedArgs)
       case 'add_text':
@@ -277,7 +391,7 @@ export function useGeminiRealtime(): UseGeminiRealtimeState {
       default:
         return { error: `Unknown tool: ${toolName}` }
     }
-  }, [addText, connectItems, deleteItem, drawItem])
+  }, [addText, connectItems, deleteItem, drawItem, listItems, updateItem])
 
   const startMicrophoneStream = useCallback(async () => {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -404,14 +518,38 @@ export function useGeminiRealtime(): UseGeminiRealtimeState {
                   },
                 },
                 {
-                  name: 'delete_item',
-                  description: 'Delete an item by its UUID.',
+                  name: 'list_items',
+                  description: 'List the current numbered components on the whiteboard so an existing item can be identified.',
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {},
+                  },
+                },
+                {
+                  name: 'update_item',
+                  description: 'Move or rename an existing numbered item. Use item_type and item_number, such as database and 2, or use its UUID.',
                   parameters: {
                     type: Type.OBJECT,
                     properties: {
                       item_uuid: { type: Type.STRING },
+                      item_type: { type: Type.STRING, enum: ['database', 'person', 'server', 'gpt_5', 'frontend', 'gpt_realtime'] },
+                      item_number: { type: Type.NUMBER },
+                      x: { type: Type.NUMBER },
+                      y: { type: Type.NUMBER },
+                      label: { type: Type.STRING },
                     },
-                    required: ['item_uuid'],
+                  },
+                },
+                {
+                  name: 'delete_item',
+                  description: 'Delete an item by UUID or by its numbered name, such as item_type database and item_number 2.',
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      item_uuid: { type: Type.STRING },
+                      item_type: { type: Type.STRING, enum: ['database', 'person', 'server', 'gpt_5', 'frontend', 'gpt_realtime'] },
+                      item_number: { type: Type.NUMBER },
+                    },
                   },
                 },
                 {
@@ -560,6 +698,34 @@ export function useGeminiRealtime(): UseGeminiRealtimeState {
 
   const setEditor = useCallback((editor: any) => {
     editorRef.current = editor
+
+    const items = getItems()
+    const nextNumbers: Record<string, number> = {}
+    const updates: any[] = []
+
+    items.forEach((shape: any) => {
+      const itemType = getItemType(shape)
+      if (!itemType) return
+
+      const existingNumber = Number(shape.props?.componentNumber)
+      const componentNumber = Number.isFinite(existingNumber) ? existingNumber : (nextNumbers[itemType] || 0) + 1
+      nextNumbers[itemType] = Math.max(nextNumbers[itemType] || 0, componentNumber)
+      const displayName = shape.props?.displayName || `${itemNameMap[itemType]} ${componentNumber}`
+
+      if (shape.props?.componentType !== itemType || shape.props?.componentNumber !== componentNumber || shape.props?.displayName !== displayName) {
+        updates.push({
+          id: shape.id,
+          type: shape.type,
+          props: {
+            componentType: itemType,
+            componentNumber,
+            displayName,
+          },
+        })
+      }
+    })
+
+    if (updates.length) editor.updateShapes(updates)
   }, [])
 
   return {
@@ -570,7 +736,8 @@ export function useGeminiRealtime(): UseGeminiRealtimeState {
     connectRealtime,
     disconnectRealtime,
     toggleMute,
-    setEditor
+    setEditor,
+    executeToolCall,
   }
 }
 
